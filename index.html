@@ -1,0 +1,715 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>도쿄 노선도</title>
+<style>
+  :root{
+    --bg:#0d1117; --panel:#151b23; --panel-border:#242c38;
+    --ink:#e6edf3; --ink-dim:#7d8794; --accent:#f2c14e;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;background:var(--bg);color:var(--ink);
+    font-family:"Pretendard","Noto Sans KR","Apple SD Gothic Neo",-apple-system,BlinkMacSystemFont,sans-serif;
+    height:100%;}
+  #app{display:flex;flex-direction:column;height:100vh;}
+  header{padding:16px 22px 10px;border-bottom:1px solid var(--panel-border);flex-shrink:0;
+    display:flex;align-items:center;gap:12px;}
+  #sidebar-toggle{flex-shrink:0;width:34px;height:34px;border-radius:9px;border:1px solid var(--panel-border);
+    background:#1c2430;color:var(--ink);font-size:15px;cursor:pointer;display:flex;
+    align-items:center;justify-content:center;}
+  #sidebar-toggle:hover{background:#232d3a;}
+  header .titles{min-width:0;}
+  header h1{margin:0 0 3px;font-size:19px;font-weight:700;letter-spacing:-0.01em;}
+  header p{margin:0;font-size:12px;color:var(--ink-dim);}
+  #main{display:flex;flex:1;min-height:0;}
+  #sidebar{width:240px;flex-shrink:0;border-right:1px solid var(--panel-border);
+    display:flex;flex-direction:column;overflow:hidden;background:var(--panel);
+    transition:width .22s ease;}
+  #sidebar.collapsed{width:0;border-right:none;}
+  #search-wrap{padding:10px 10px 6px;flex-shrink:0;position:relative;}
+  #search-input{width:100%;padding:8px 10px;border-radius:8px;border:1px solid var(--panel-border);
+    background:#0d1117;color:var(--ink);font-size:12.5px;outline:none;}
+  #search-input:focus{border-color:var(--accent);}
+  #search-results{position:absolute;left:10px;right:10px;top:42px;background:#1c2430;
+    border:1px solid #33404f;border-radius:8px;max-height:280px;overflow-y:auto;z-index:20;
+    box-shadow:0 8px 24px rgba(0,0,0,.45);display:none;}
+  .sr-item{display:flex;align-items:center;gap:7px;padding:7px 10px;font-size:12px;cursor:pointer;}
+  .sr-item:hover{background:#242f3d;}
+  .sr-chip{width:8px;height:8px;border-radius:50%;flex-shrink:0;}
+  .sr-jp{color:var(--ink-dim);font-size:10.5px;margin-left:auto;}
+  .sr-empty{padding:10px;font-size:11.5px;color:var(--ink-dim);}
+  #legend{overflow-y:auto;flex:1;padding:2px 10px 10px;}
+  .legend-section-title{font-size:10.5px;color:var(--ink-dim);text-transform:uppercase;
+    letter-spacing:.06em;margin:14px 6px 6px;font-weight:600;}
+  .legend-section-title:first-child{margin-top:4px;}
+  .line-btn{display:flex;align-items:center;gap:8px;width:100%;padding:7px 8px;
+    background:transparent;border:1px solid transparent;border-radius:7px;cursor:pointer;
+    color:var(--ink);font-size:12.5px;text-align:left;transition:background .12s;}
+  .line-btn:hover{background:#1c2430;}
+  .line-btn.active{background:#1e2733;border-color:#33404f;}
+  .line-swatch{width:14px;height:14px;border-radius:4px;flex-shrink:0;}
+  .line-name{flex:1;line-height:1.25;}
+  .line-name small{display:block;color:var(--ink-dim);font-size:10px;}
+  .line-name .cnt{color:var(--ink-dim);font-size:10px;}
+  #reset-btn{margin:8px 10px 10px;padding:9px;border-radius:8px;border:1px solid var(--panel-border);
+    background:#1c2430;color:var(--ink);font-size:12.5px;cursor:pointer;flex-shrink:0;}
+  #reset-btn:hover{background:#232d3a;}
+  #reset-btn:disabled{opacity:.35;cursor:default;}
+  #bookmark-panel{border-top:1px solid var(--panel-border);padding:10px;max-height:28%;
+    overflow-y:auto;flex-shrink:0;}
+  #bookmark-panel .legend-section-title{margin-top:0;}
+  .bm-item{display:flex;align-items:center;gap:6px;padding:5px 6px;font-size:12px;border-radius:6px;cursor:pointer;}
+  .bm-item:hover{background:#1c2430;}
+  .bm-empty{font-size:11.5px;color:var(--ink-dim);padding:2px 6px;line-height:1.5;}
+  #map-wrap{flex:1;position:relative;overflow:hidden;background:
+    radial-gradient(ellipse at 35% 30%, #131a24 0%, var(--bg) 65%);cursor:grab;}
+  #map-wrap.panning{cursor:grabbing;}
+  svg#map{width:100%;height:100%;display:block;touch-action:none;}
+  .line-path{fill:none;stroke-linecap:round;stroke-linejoin:round;
+    transition:opacity .25s ease, stroke-width .25s ease;}
+  .station-dot{transition:opacity .25s ease, r .2s ease, width .2s ease, height .2s ease, x .2s ease, y .2s ease, stroke-width .2s ease;cursor:pointer;}
+  .station-label{font-size:8.5px;fill:var(--ink);pointer-events:none;transition:opacity .25s ease;font-weight:500;}
+  .station-label.interchange{font-weight:700;font-size:9.5px;}
+  .star{transition:opacity .2s ease;pointer-events:none;}
+  .pulse-ring{fill:none;stroke:var(--accent);stroke-width:2;opacity:0;pointer-events:none;}
+  .pulse-ring.go{animation:pulse 1.4s ease-out 2;}
+  @keyframes pulse{0%{r:6;opacity:.9;} 100%{r:26;opacity:0;}}
+  #tooltip{position:absolute;pointer-events:none;background:#1c2430;border:1px solid #33404f;
+    border-radius:8px;padding:8px 11px;font-size:12px;color:var(--ink);display:none;
+    box-shadow:0 6px 20px rgba(0,0,0,.4);max-width:220px;z-index:10;}
+  #tooltip .tt-name{font-weight:700;font-size:13px;margin-bottom:2px;}
+  #tooltip .tt-jp{color:var(--ink-dim);font-size:11px;margin-bottom:5px;}
+  #tooltip .tt-lines{display:flex;flex-wrap:wrap;gap:4px;}
+  #tooltip .tt-line-chip{font-size:10px;padding:1px 6px;border-radius:9px;color:#0d1117;font-weight:700;}
+  #tooltip .tt-hint{margin-top:6px;color:var(--ink-dim);font-size:10.5px;}
+  #hint-banner{position:absolute;bottom:14px;left:50%;transform:translateX(-50%);
+    background:#1c2430ee;border:1px solid #33404f;border-radius:20px;padding:7px 16px;
+    font-size:11.5px;color:var(--ink-dim);white-space:nowrap;}
+  #zoom-controls{position:absolute;top:14px;right:14px;display:flex;flex-direction:column;gap:6px;z-index:8;}
+  .zoom-btn{width:34px;height:34px;border-radius:9px;border:1px solid #33404f;background:#1c2430ee;
+    color:var(--ink);font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;}
+  .zoom-btn:hover{background:#232d3a;}
+  .zoom-btn.small{font-size:11px;}
+  ::-webkit-scrollbar{width:7px;}
+  ::-webkit-scrollbar-thumb{background:#2a3341;border-radius:4px;}
+
+  @media (max-width:720px){
+    header{padding:10px 14px 8px;gap:9px;}
+    header h1{font-size:15px;}
+    header p{display:none;}
+    #main{position:relative;}
+    #sidebar{position:absolute;top:0;left:0;height:100%;width:84vw;max-width:320px;
+      z-index:15;box-shadow:10px 0 30px rgba(0,0,0,.5);
+      transition:transform .25s ease;transform:translateX(0);}
+    #sidebar.collapsed{width:84vw;transform:translateX(-100%);border-right:1px solid var(--panel-border);}
+    .zoom-btn{width:42px;height:42px;font-size:19px;}
+    .line-btn{padding:10px 8px;}
+    #hint-banner{font-size:10.5px;padding:6px 12px;bottom:8px;max-width:88vw;
+      white-space:normal;text-align:center;}
+  }
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <button id="sidebar-toggle" title="메뉴 접기/펼치기">☰</button>
+    <div class="titles">
+      <h1>도쿄 교통 노선도</h1>
+      <p>각 노선의 전체 정차역 포함 — 정거장 수 계산용으로도 사용 가능</p>
+    </div>
+  </header>
+  <div id="main">
+    <div id="sidebar">
+      <div id="search-wrap">
+        <input id="search-input" type="text" placeholder="역 검색 (영문/일문) 예: Shibuya">
+        <div id="search-results"></div>
+      </div>
+      <button id="reset-btn" disabled>전체 노선 보기</button>
+      <div id="legend"></div>
+      <div id="bookmark-panel">
+        <div class="legend-section-title">★ 즐겨찾는 역</div>
+        <div id="bm-list"></div>
+      </div>
+    </div>
+    <div id="map-wrap">
+      <svg id="map" viewBox="0 0 1000 800" preserveAspectRatio="xMidYMid meet"></svg>
+      <div id="zoom-controls">
+        <button class="zoom-btn" id="zoom-in" title="확대">+</button>
+        <button class="zoom-btn" id="zoom-out" title="축소">−</button>
+        <button class="zoom-btn small" id="zoom-reset" title="전체 보기">⤢</button>
+      </div>
+      <div id="tooltip"></div>
+      <div id="hint-banner">스크롤로 확대/축소 · 드래그로 이동 · 노선 여러 개 동시 선택 가능</div>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ---------------- DATA ---------------- */
+const S = (en, jp, x, y) => (x===undefined ? {en,jp} : {en,jp,x,y});
+
+const stations = {
+  // ===== Manual anchors (JR Yamanote loop) =====
+  tokyo: S("Tokyo","東京",555,400), kanda: S("Kanda","神田",545,365),
+  akihabara: S("Akihabara","秋葉原",550,340), okachimachi: S("Okachimachi","御徒町",540,310),
+  ueno: S("Ueno","上野",535,285), uguisudani: S("Uguisudani","鶯谷",525,265),
+  nippori: S("Nippori","日暮里",510,250), nishinippori: S("Nishi-Nippori","西日暮里",490,245),
+  tabata: S("Tabata","田端",465,240), komagome: S("Komagome","駒込",440,235),
+  sugamo: S("Sugamo","巣鴨",415,235), otsuka: S("Otsuka","大塚",390,240),
+  ikebukuro: S("Ikebukuro","池袋",360,250), mejiro: S("Mejiro","目白",345,275),
+  takadanobaba: S("Takadanobaba","高田馬場",330,300), shinokubo: S("Shin-Okubo","新大久保",335,335),
+  shinjuku: S("Shinjuku","新宿",340,365), yoyogi: S("Yoyogi","代々木",355,390),
+  harajuku: S("Harajuku","原宿",375,410), shibuya: S("Shibuya","渋谷",400,435),
+  ebisu: S("Ebisu","恵比寿",415,460), meguro: S("Meguro","目黒",425,485),
+  gotanda: S("Gotanda","五反田",445,505), osaki: S("Osaki","大崎",470,520),
+  shinagawa: S("Shinagawa","品川",500,525), takanawagateway: S("Takanawa Gateway","高輪ゲートウェイ"),
+  tamachi: S("Tamachi","田町",520,505), hamamatsucho: S("Hamamatsucho","浜松町",535,480),
+  shimbashi: S("Shimbashi","新橋",545,450), yurakucho: S("Yurakucho","有楽町",550,425),
+  // ===== Chuo line (extended to Takao) =====
+  ochanomizu: S("Ochanomizu","御茶ノ水",535,350), suidobashi: S("Suidobashi","水道橋",510,335),
+  iidabashi: S("Iidabashi","飯田橋",485,320), ichigaya: S("Ichigaya","市ヶ谷",460,340),
+  yotsuya: S("Yotsuya","四ツ谷",430,355), nakano: S("Nakano","中野",290,365),
+  koenji: S("Koenji","高円寺",255,365), asagaya: S("Asagaya","阿佐ヶ谷",225,365),
+  ogikubo: S("Ogikubo","荻窪",195,365), nishiogikubo: S("Nishi-Ogikubo","西荻窪"),
+  kichijoji: S("Kichijoji","吉祥寺",155,365), mitaka: S("Mitaka","三鷹",125,365),
+  musashisakai: S("Musashi-Sakai","武蔵境"), higashikoganei: S("Higashi-Koganei","東小金井"),
+  musashikoganei: S("Musashi-Koganei","武蔵小金井"), kokubunji: S("Kokubunji","国分寺"),
+  nishikokubunji: S("Nishi-Kokubunji","西国分寺"), kunitachi: S("Kunitachi","国立"),
+  tachikawa: S("Tachikawa","立川",0,365), hino: S("Hino","日野"), toyoda: S("Toyoda","豊田"),
+  hachioji: S("Hachioji","八王子",-55,365), nishihachioji: S("Nishi-Hachioji","西八王子"),
+  takao: S("Takao","高尾",-90,365),
+  // ===== Airport lines =====
+  naritaairport: S("Narita Airport","成田空港",870,220), hanedaairport: S("Haneda Airport T1·2","羽田空港第1・2ターミナル",560,660),
+  keikyukamata: S("Keikyu-Kamata","京急蒲田"), anamoriinari: S("Anamori-Inari","穴守稲荷"),
+  ottori: S("Ottori","大鳥居"), tenkubashi: S("Tenkubashi","天空橋"),
+  hanedaairport3: S("Haneda Airport T3","羽田空港第3ターミナル"),
+  // ===== Ginza line =====
+  omotesando: S("Omotesando","表参道",390,410), gaienmae: S("Gaienmae","外苑前",410,400),
+  aoyamaitchome: S("Aoyama-itchome","青山一丁目",430,405), akasakamitsuke: S("Akasaka-mitsuke","赤坂見附",455,400),
+  tameikesanno: S("Tameike-sanno","溜池山王",472,405),
+  toranomon: S("Toranomon","虎ノ門",490,410), ginza: S("Ginza","銀座",555,430),
+  kyobashi: S("Kyobashi","京橋",555,410), nihombashi: S("Nihombashi","日本橋",560,390),
+  mitsukoshimae: S("Mitsukoshimae","三越前",565,378),
+  suehirocho: S("Suehirocho","末広町"), uenohirokoji: S("Ueno-hirokoji","上野広小路"),
+  inaricho: S("Inaricho","稲荷町"), tawaramachi: S("Tawaramachi","田原町"),
+  asakusa: S("Asakusa","浅草",600,270),
+  // ===== Marunouchi line (full main line) =====
+  minamiasagaya: S("Minami-Asagaya","南阿佐ヶ谷"), shinkoenji: S("Shin-Koenji","新高円寺"),
+  higashikoenji: S("Higashi-Koenji","東高円寺"), shinnakano: S("Shin-Nakano","新中野"),
+  nakanosakaue: S("Nakano-sakaue","中野坂上",300,335), nishishinjuku: S("Nishi-Shinjuku","西新宿"),
+  yotsuyasanchome: S("Yotsuya-sanchome","四谷三丁目"),
+  kokkaigijidomae: S("Kokkai-gijidomae","国会議事堂前",475,395), kasumigaseki: S("Kasumigaseki","霞ヶ関",495,408),
+  otemachi: S("Otemachi","大手町",555,385), awajicho: S("Awajicho","淡路町"),
+  hongosanchome: S("Hongo-sanchome","本郷三丁目"), korakuen: S("Korakuen","後楽園",498,300),
+  myogadani: S("Myogadani","茗荷谷"), shinotsuka: S("Shin-Otsuka","新大塚"),
+  // ===== Hibiya line =====
+  nakameguro: S("Naka-meguro","中目黒",410,470), hiroo: S("Hiroo","広尾"),
+  roppongi: S("Roppongi","六本木",465,440), kamiyacho: S("Kamiyacho","神谷町",490,435),
+  hibiya: S("Hibiya","日比谷",535,418), higashiginza: S("Higashi-Ginza","東銀座",560,412),
+  tsukiji: S("Tsukiji","築地",570,402), hatchobori: S("Hatchobori","八丁堀",580,398),
+  kayabacho: S("Kayabacho","茅場町",578,388), ningyocho: S("Ningyocho","人形町",570,370),
+  kodenmacho: S("Kodenmacho","小伝馬町",560,355), nakaokachimachi: S("Naka-okachimachi","仲御徒町"),
+  iriya: S("Iriya","入谷"), minowa: S("Minowa","三ノ輪",520,255),
+  minamisenju: S("Minami-Senju","南千住"), kitasenju: S("Kita-Senju","北千住",505,205),
+  // ===== Tozai line =====
+  ochiai: S("Ochiai","落合"), waseda: S("Waseda","早稲田",360,315),
+  kagurazaka: S("Kagurazaka","神楽坂"), kudanshita: S("Kudanshita","九段下",475,335),
+  takebashi: S("Takebashi","竹橋"), monzennakacho: S("Monzen-nakacho","門前仲町",640,372),
+  kiba: S("Kiba","木場"), toyocho: S("Toyocho","東陽町"),
+  minamisunamachi: S("Minami-sunamachi","南砂町"), nishikasai: S("Nishi-kasai","西葛西"),
+  kasai: S("Kasai","葛西"), urayasu: S("Urayasu","浦安"), minamigyotoku: S("Minami-gyotoku","南行徳"),
+  gyotoku: S("Gyotoku","行徳"), myoden: S("Myoden","妙典"), barakinakayama: S("Baraki-nakayama","原木中山"),
+  nishifunabashi: S("Nishi-Funabashi","西船橋",750,300),
+  // ===== Chiyoda line =====
+  yoyogiuehara: S("Yoyogi-Uehara","代々木上原",340,410), yoyogikoen: S("Yoyogi-koen","代々木公園"),
+  meijijingumae: S("Meiji-jingumae","明治神宮前",380,405), nogizaka: S("Nogizaka","乃木坂",430,420),
+  akasaka: S("Akasaka","赤坂",460,415), nijubashimae: S("Nijubashimae","二重橋前"),
+  shinochanomizu: S("Shin-ochanomizu","新御茶ノ水",530,345), yushima: S("Yushima","湯島",525,300),
+  nezu: S("Nezu","根津",505,280), sendagi: S("Sendagi","千駄木",490,265),
+  machiya: S("Machiya","町屋"), ayase: S("Ayase","綾瀬",515,185),
+  // ===== Yurakucho / Fukutoshin shared north chain =====
+  wakoshi: S("Wakoshi","和光市",330,190), chikatetsunarimasu: S("Chikatetsu-narimasu","地下鉄成増"),
+  chikatetsuakatsuka: S("Chikatetsu-akatsuka","地下鉄赤塚"), heiwadai: S("Heiwadai","平和台"),
+  hikawadai: S("Hikawadai","氷川台"), kanamecho: S("Kanamecho","要町"), senkawa: S("Senkawa","千川"),
+  kotakemukaihara: S("Kotake-mukaihara","小竹向原",345,215),
+  higashiikebukuro: S("Higashi-ikebukuro","東池袋"), gokokuji: S("Gokokuji","護国寺"),
+  edogawabashi: S("Edogawabashi","江戸川橋"), ginzaitchome: S("Ginza-itchome","銀座一丁目",560,440),
+  shintomicho: S("Shintomicho","新富町"), tsukishima: S("Tsukishima","月島",600,415),
+  toyosu: S("Toyosu","豊洲",650,400), shinkiba: S("Shin-kiba","新木場",670,410),
+  zoshigaya: S("Zoshigaya","雑司が谷"), nishiwaseda: S("Nishi-waseda","西早稲田"),
+  higashishinjuku: S("Higashi-Shinjuku","東新宿"), shinjukusanchome: S("Shinjuku-sanchome","新宿三丁目",360,375),
+  kitasando: S("Kita-sando","北参道",390,380),
+  // ===== Hanzomon line =====
+  nagatacho: S("Nagatacho","永田町",465,405), hanzomon: S("Hanzomon","半蔵門",490,395),
+  jimbocho: S("Jimbocho","神保町"), suitengumae: S("Suitengumae","水天宮前",572,373),
+  kiyosumishirakawa: S("Kiyosumi-shirakawa","清澄白河",605,350), sumiyoshi: S("Sumiyoshi","住吉"),
+  kinshicho: S("Kinshicho","錦糸町"), oshiage: S("Oshiage","押上",650,300),
+  // ===== Namboku line =====
+  shirokanedai: S("Shirokanedai","白金台",435,465), shirokanetakanawa: S("Shirokane-takanawa","白金高輪"),
+  azabujuban: S("Azabujuban","麻布十番",450,455), roppongiitchome: S("Roppongi-itchome","六本木一丁目",460,455),
+  nishigahara: S("Nishigahara","西ヶ原"), oji: S("Oji","王子"), ojikamiya: S("Oji-kamiya","王子神谷"),
+  shimo: S("Shimo","志茂"), akabaneiwabuchi: S("Akabane-iwabuchi","赤羽岩淵",400,180),
+  // ===== Toei Asakusa line =====
+  nishimagome: S("Nishi-magome","西馬込",430,540), magome: S("Magome","馬込"),
+  nakanobashi: S("Nakanobashi","中延"), nagahara: S("Nagahara","長原"), togoshi: S("Togoshi","戸越"),
+  sengakuji: S("Sengakuji","泉岳寺",470,530), mita: S("Mita","三田"), onarimon: S("Onarimon","御成門"),
+  daimon: S("Daimon","大門",540,460), higashinihombashi: S("Higashi-Nihombashi","東日本橋"),
+  asakusabashi: S("Asakusabashi","浅草橋",590,340), kuramae: S("Kuramae","蔵前",598,315),
+  honjoazumabashi: S("Honjo-azumabashi","本所吾妻橋"),
+  // ===== Toei Oedo line =====
+  tochomae: S("Tochomae","都庁前",320,350), shinjukunishiguchi: S("Shinjuku-nishiguchi","新宿西口"),
+  wakamatsukawada: S("Wakamatsu-kawada","若松河田"), ushigomeyanagicho: S("Ushigome-yanagicho","牛込柳町"),
+  ushigomekagurazaka: S("Ushigome-kagurazaka","牛込神楽坂"), kasuga: S("Kasuga","春日"),
+  uenookachimachi: S("Ueno-okachimachi","上野御徒町"), shinokachimachi: S("Shin-okachimachi","新御徒町"),
+  ryogoku: S("Ryogoku","両国",610,340), morishita: S("Morishita","森下"),
+  kachidoki: S("Kachidoki","勝どき",590,430), tsukijishijo: S("Tsukiji-shijo","築地市場"),
+  akabanebashi: S("Akabanebashi","赤羽橋"), kokuritsukyogijo: S("Kokuritsu-kyogijo","国立競技場"),
+  nishishinjukugochome: S("Nishi-Shinjuku-gochome","西新宿五丁目"), higashinakano: S("Higashi-Nakano","東中野"),
+  ochiaiminaminagasaki: S("Ochiai-minami-nagasaki","落合南長崎"), shinegota: S("Shin-egota","新江古田"),
+  nerima: S("Nerima","練馬"), toshimaen: S("Toshimaen","豊島園"), nerimakasugacho: S("Nerima-kasugacho","練馬春日町"),
+  hikarigaoka: S("Hikarigaoka","光が丘",140,150),
+  shiodome: S("Shiodome","汐留",555,445),
+};
+
+const lines = [
+  {id:"yamanote", name:"JR 야마노테선", en:"Yamanote Line", color:"#8fc31f", group:"JR", loop:true,
+    stations:["tokyo","kanda","akihabara","okachimachi","ueno","uguisudani","nippori","nishinippori","tabata","komagome","sugamo","otsuka","ikebukuro","mejiro","takadanobaba","shinokubo","shinjuku","yoyogi","harajuku","shibuya","ebisu","meguro","gotanda","osaki","shinagawa","takanawagateway","tamachi","hamamatsucho","shimbashi","yurakucho"]},
+  {id:"chuo", name:"JR 주오선(쾌속)", en:"Chuo Line (Rapid)", color:"#f15a22", group:"JR",
+    stations:["takao","nishihachioji","hachioji","toyoda","hino","tachikawa","kunitachi","nishikokubunji","kokubunji","musashikoganei","higashikoganei","musashisakai","mitaka","kichijoji","nishiogikubo","ogikubo","asagaya","koenji","nakano","shinjuku","yotsuya","ichigaya","iidabashi","suidobashi","ochanomizu","kanda","tokyo"]},
+  {id:"keisei", name:"게이세이 스카이라이너", en:"Keisei Skyliner", color:"#0068b6", group:"공항철도",
+    stations:["naritaairport","nippori","ueno"]},
+  {id:"keikyu", name:"게이큐 공항선", en:"Keikyu Airport Line", color:"#00a0dc", group:"공항철도",
+    stations:["shinagawa","keikyukamata","anamoriinari","ottori","tenkubashi","hanedaairport3","hanedaairport"]},
+  {id:"ginza", name:"긴자선", en:"Ginza Line", color:"#ff9500", group:"도쿄메트로",
+    stations:["shibuya","omotesando","gaienmae","aoyamaitchome","akasakamitsuke","tameikesanno","toranomon","shimbashi","ginza","kyobashi","nihombashi","mitsukoshimae","kanda","suehirocho","uenohirokoji","ueno","inaricho","tawaramachi","asakusa"]},
+  {id:"marunouchi", name:"마루노우치선", en:"Marunouchi Line", color:"#e60012", group:"도쿄메트로",
+    stations:["ogikubo","minamiasagaya","shinkoenji","higashikoenji","shinnakano","nakanosakaue","nishishinjuku","shinjuku","shinjukusanchome","yotsuyasanchome","yotsuya","akasakamitsuke","kokkaigijidomae","kasumigaseki","ginza","tokyo","otemachi","awajicho","ochanomizu","hongosanchome","korakuen","myogadani","shinotsuka","ikebukuro"]},
+  {id:"hibiya", name:"히비야선", en:"Hibiya Line", color:"#9bafb8", group:"도쿄메트로",
+    stations:["nakameguro","ebisu","hiroo","roppongi","kamiyacho","kasumigaseki","hibiya","ginza","higashiginza","tsukiji","hatchobori","kayabacho","ningyocho","kodenmacho","akihabara","nakaokachimachi","ueno","iriya","minowa","minamisenju","kitasenju"]},
+  {id:"tozai", name:"도자이선", en:"Tozai Line", color:"#00a7db", group:"도쿄메트로",
+    stations:["nakano","ochiai","takadanobaba","waseda","kagurazaka","iidabashi","kudanshita","takebashi","otemachi","nihombashi","kayabacho","monzennakacho","kiba","toyocho","minamisunamachi","nishikasai","kasai","urayasu","minamigyotoku","gyotoku","myoden","barakinakayama","nishifunabashi"]},
+  {id:"chiyoda", name:"지요다선", en:"Chiyoda Line", color:"#00a650", group:"도쿄메트로",
+    stations:["yoyogiuehara","yoyogikoen","meijijingumae","omotesando","nogizaka","akasaka","kokkaigijidomae","kasumigaseki","nijubashimae","otemachi","shinochanomizu","yushima","nezu","sendagi","nishinippori","machiya","kitasenju","ayase"]},
+  {id:"yurakucho", name:"유라쿠초선", en:"Yurakucho Line", color:"#c1a470", group:"도쿄메트로",
+    stations:["wakoshi","chikatetsunarimasu","chikatetsuakatsuka","heiwadai","hikawadai","kanamecho","senkawa","kotakemukaihara","ikebukuro","higashiikebukuro","gokokuji","edogawabashi","iidabashi","kudanshita","otemachi","yurakucho","ginzaitchome","shintomicho","tsukishima","toyosu","shinkiba"]},
+  {id:"hanzomon", name:"한조몬선", en:"Hanzomon Line", color:"#8f76d6", group:"도쿄메트로",
+    stations:["shibuya","omotesando","aoyamaitchome","nagatacho","hanzomon","kudanshita","jimbocho","otemachi","mitsukoshimae","suitengumae","kiyosumishirakawa","sumiyoshi","kinshicho","oshiage"]},
+  {id:"namboku", name:"난보쿠선", en:"Namboku Line", color:"#00ac9b", group:"도쿄메트로",
+    stations:["meguro","shirokanedai","shirokanetakanawa","azabujuban","roppongiitchome","tameikesanno","yotsuya","ichigaya","iidabashi","korakuen","komagome","nishigahara","oji","ojikamiya","shimo","akabaneiwabuchi"]},
+  {id:"fukutoshin", name:"후쿠토신선", en:"Fukutoshin Line", color:"#9c5e31", group:"도쿄메트로",
+    stations:["wakoshi","chikatetsunarimasu","chikatetsuakatsuka","heiwadai","hikawadai","kanamecho","senkawa","kotakemukaihara","ikebukuro","zoshigaya","nishiwaseda","higashishinjuku","shinjukusanchome","kitasando","meijijingumae","shibuya"]},
+  {id:"asakusa", name:"도영 아사쿠사선", en:"Toei Asakusa Line", color:"#e85298", group:"도영지하철",
+    stations:["nishimagome","magome","nakanobashi","nagahara","togoshi","sengakuji","mita","onarimon","daimon","shimbashi","higashiginza","higashinihombashi","asakusabashi","kuramae","asakusa","honjoazumabashi","oshiage"]},
+  {id:"oedo", name:"도영 오에도선", en:"Toei Oedo Line", color:"#b6007a", group:"도영지하철",
+    stations:["tochomae","shinjukunishiguchi","higashishinjuku","wakamatsukawada","ushigomeyanagicho","ushigomekagurazaka","iidabashi","kasuga","hongosanchome","uenookachimachi","shinokachimachi","kuramae","ryogoku","morishita","kiyosumishirakawa","monzennakacho","tsukishima","kachidoki","tsukijishijo","shiodome","daimon","akabanebashi","azabujuban","roppongi","aoyamaitchome","kokuritsukyogijo","yoyogi","shinjuku","nishishinjukugochome","nakanosakaue","higashinakano","ochiaiminaminagasaki","shinegota","nerima","toshimaen","nerimakasugacho","hikarigaoka"]},
+];
+
+/* ---------------- AUTO-INTERPOLATE missing coordinates ---------------- */
+lines.forEach(line=>{
+  const ids = line.stations;
+  let i = 0;
+  while(i < ids.length){
+    if(stations[ids[i]].x !== undefined){ i++; continue; }
+    const startIdx = i - 1, a = stations[ids[startIdx]];
+    let endIdx = i;
+    while(endIdx < ids.length && stations[ids[endIdx]].x === undefined) endIdx++;
+    const b = stations[ids[endIdx]];
+    const n = endIdx - startIdx;
+    for(let k = startIdx+1; k < endIdx; k++){
+      const t = (k-startIdx)/n, sid = ids[k];
+      if(stations[sid].x === undefined){
+        stations[sid].x = a.x + (b.x-a.x)*t;
+        stations[sid].y = a.y + (b.y-a.y)*t;
+      }
+    }
+    i = endIdx;
+  }
+});
+
+/* ---------------- STATE ---------------- */
+let activeLines = new Set();
+let bookmarks = new Set();
+let vb = {x:0,y:0,w:1000,h:800};
+const VB_MIN_W = 90, VB_MAX_W = 1150, ASPECT = 800/1000;
+
+/* ---------------- STORAGE ---------------- */
+/* localStorage is used (not window.storage) so bookmarks persist correctly
+   when this file is hosted on GitHub Pages, opened locally, etc. */
+const BM_KEY = "tokyo-map-bookmarks";
+function loadBookmarks(){
+  try{
+    const raw = localStorage.getItem(BM_KEY);
+    if(raw) bookmarks = new Set(JSON.parse(raw));
+  }catch(e){ console.warn("bookmark load failed", e); }
+  renderStars(); renderBookmarkList(); applyHighlight();
+}
+function saveBookmarks(){
+  try{ localStorage.setItem(BM_KEY, JSON.stringify([...bookmarks])); }
+  catch(e){ console.warn("bookmark save failed", e); }
+}
+
+/* ---------------- interchange map ---------------- */
+const stationLineMap = {};
+lines.forEach(line=>{
+  line.stations.forEach(sid=>{
+    if(!stationLineMap[sid]) stationLineMap[sid] = [];
+    stationLineMap[sid].push(line);
+  });
+});
+
+/* ---------------- SVG RENDER ---------------- */
+const svg = document.getElementById("map");
+const NS = "http://www.w3.org/2000/svg";
+function el(tag, attrs){ const e = document.createElementNS(NS, tag); for(const k in attrs) e.setAttribute(k, attrs[k]); return e; }
+function updateViewBox(){ svg.setAttribute("viewBox", `${vb.x} ${vb.y} ${vb.w} ${vb.h}`); }
+
+const linePathEls = {};
+lines.forEach(line=>{
+  const d = "M " + line.stations.map(sid=>`${stations[sid].x},${stations[sid].y}`).join(" L ") + (line.loop ? " Z" : "");
+  const path = el("path", {d, class:"line-path", stroke: line.color, "stroke-width": 3.6, opacity:0.9, "data-line":line.id});
+  svg.appendChild(path);
+  linePathEls[line.id] = path;
+});
+
+const stationDotEls = {}, stationLabelEls = {}, starEls = {}, pulseEls = {}, stationShape = {};
+const pulseGroup = el("g", {}); svg.appendChild(pulseGroup);
+const dotGroup = el("g", {}); svg.appendChild(dotGroup);
+const labelGroup = el("g", {}); svg.appendChild(labelGroup);
+const starGroup = el("g", {}); svg.appendChild(starGroup);
+
+Object.keys(stations).forEach(sid=>{
+  const st = stations[sid];
+  const linesHere = stationLineMap[sid] || [];
+  const isInterchange = linesHere.length > 1;
+  const color = linesHere[0] ? linesHere[0].color : "#888";
+  stationShape[sid] = isInterchange ? "circle" : "rect";
+
+  const pulse = el("circle", {cx:st.x, cy:st.y, r:6, class:"pulse-ring"});
+  pulseGroup.appendChild(pulse); pulseEls[sid] = pulse;
+
+  let dot;
+  if(isInterchange){
+    dot = el("circle", {
+      cx:st.x, cy:st.y, r:5.5, fill:"#0d1117",
+      stroke: color, "stroke-width":2.4, class:"station-dot", "data-sid": sid
+    });
+  } else {
+    const size = 8.5;
+    dot = el("rect", {
+      x: st.x - size/2, y: st.y - size/2, width:size, height:size,
+      fill: color, stroke:"#0d1117", "stroke-width":1.3, class:"station-dot", "data-sid": sid
+    });
+  }
+  dotGroup.appendChild(dot); stationDotEls[sid] = dot;
+
+  const label = el("text", {
+    class: "station-label" + (isInterchange?" interchange":"")
+  });
+  label.textContent = st.en;
+  labelGroup.appendChild(label); stationLabelEls[sid] = label;
+
+  const star = el("text", {x: st.x - 12, y: st.y + 4, class:"star", opacity:0, "font-size":"11", fill:"#f2c14e"});
+  star.textContent = "★";
+  starGroup.appendChild(star); starEls[sid] = star;
+});
+
+/* ---------------- label placement (avoid overlaps) ---------------- */
+function layoutLabels(){
+  const CHAR_W = {normal:4.5, interchange:5.1};
+  const placed = [];
+  const order = Object.keys(stations).sort((a,b)=>{
+    const da = (stationLineMap[a]||[]).length, db = (stationLineMap[b]||[]).length;
+    return db - da;
+  });
+  const dirs = [
+    {ax:1, ay:0, anchor:"start"}, {ax:0.72,ay:-0.72, anchor:"start"}, {ax:0.72,ay:0.72, anchor:"start"},
+    {ax:0, ay:-1, anchor:"middle"}, {ax:0, ay:1, anchor:"middle"},
+    {ax:-1, ay:0, anchor:"end"}, {ax:-0.72,ay:-0.72, anchor:"end"}, {ax:-0.72,ay:0.72, anchor:"end"},
+  ];
+  function bboxFor(sid, dir){
+    const st = stations[sid];
+    const isInterchange = stationShape[sid] === "circle";
+    const baseR = isInterchange ? 8 : 7.5;
+    const w = st.en.length * (isInterchange?CHAR_W.interchange:CHAR_W.normal);
+    const h = isInterchange ? 11.5 : 10.5;
+    const lx = st.x + dir.ax*baseR, ly = st.y + dir.ay*baseR + (dir.ay===0? h*0.32 : (dir.ay<0? 0 : h*0.85));
+    let xmin, xmax;
+    if(dir.anchor==="start"){ xmin=lx; xmax=lx+w; }
+    else if(dir.anchor==="end"){ xmin=lx-w; xmax=lx; }
+    else { xmin=lx-w/2; xmax=lx+w/2; }
+    return {xmin, xmax, ymin: ly-h*0.8, ymax: ly+h*0.3, lx, ly};
+  }
+  function overlapArea(b1, b2){
+    const ox = Math.max(0, Math.min(b1.xmax,b2.xmax) - Math.max(b1.xmin,b2.xmin));
+    const oy = Math.max(0, Math.min(b1.ymax,b2.ymax) - Math.max(b1.ymin,b2.ymin));
+    return ox*oy;
+  }
+  order.forEach(sid=>{
+    let best = null, bestScore = Infinity;
+    for(const dir of dirs){
+      const box = bboxFor(sid, dir);
+      let score = 0;
+      for(const p of placed) score += overlapArea(box, p);
+      if(score === 0){ best = {dir, box}; break; }
+      if(score < bestScore){ bestScore = score; best = {dir, box}; }
+    }
+    placed.push(best.box);
+    const label = stationLabelEls[sid];
+    label.setAttribute("x", best.box.lx);
+    label.setAttribute("y", best.box.ly);
+    label.setAttribute("text-anchor", best.dir.anchor);
+  });
+}
+layoutLabels();
+
+/* ---------------- highlight ---------------- */
+function applyHighlight(){
+  const noneActive = activeLines.size === 0;
+  Object.keys(linePathEls).forEach(lid=>{
+    const path = linePathEls[lid];
+    if(noneActive){ path.setAttribute("opacity",0.85); path.setAttribute("stroke-width",3.6); }
+    else if(activeLines.has(lid)){ path.setAttribute("opacity",1); path.setAttribute("stroke-width",6); }
+    else { path.setAttribute("opacity",0.08); path.setAttribute("stroke-width",2.5); }
+  });
+  Object.keys(stations).forEach(sid=>{
+    const linesHere = (stationLineMap[sid]||[]).map(l=>l.id);
+    const onActive = noneActive || linesHere.some(id=>activeLines.has(id));
+    const bookmarked = bookmarks.has(sid);
+    const dot = stationDotEls[sid], label = stationLabelEls[sid];
+    const showLabel = noneActive ? bookmarked : (onActive || bookmarked);
+    if(onActive || bookmarked){ dot.style.opacity=1; }
+    else { dot.style.opacity=0.15; }
+    label.style.opacity = showLabel ? 1 : 0;
+  });
+  document.querySelectorAll(".line-btn").forEach(btn=>btn.classList.toggle("active", activeLines.has(btn.dataset.line)));
+  document.getElementById("reset-btn").disabled = noneActive;
+}
+
+function renderStars(){
+  Object.keys(starEls).forEach(sid=>{
+    const has = bookmarks.has(sid);
+    starEls[sid].setAttribute("opacity", has?1:0);
+    const dot = stationDotEls[sid];
+    const st = stations[sid];
+    const isInterchange = stationShape[sid] === "circle";
+    const linesHere = stationLineMap[sid]||[];
+    const color = linesHere[0] ? linesHere[0].color : "#888";
+    if(isInterchange){
+      dot.setAttribute("r", has?8:5.5);
+      dot.setAttribute("stroke", has?"#f2c14e":color);
+      dot.setAttribute("stroke-width", has?2.6:2.4);
+    } else {
+      const size = has?12:8.5;
+      dot.setAttribute("x", st.x - size/2); dot.setAttribute("y", st.y - size/2);
+      dot.setAttribute("width", size); dot.setAttribute("height", size);
+      dot.setAttribute("stroke", has?"#f2c14e":"#0d1117");
+      dot.setAttribute("stroke-width", has?2.2:1.3);
+    }
+  });
+}
+
+/* ---------------- legend ---------------- */
+const legendEl = document.getElementById("legend");
+["JR","도쿄메트로","도영지하철","공항철도"].forEach(g=>{
+  const t = document.createElement("div"); t.className="legend-section-title"; t.textContent=g;
+  legendEl.appendChild(t);
+  lines.filter(l=>l.group===g).forEach(line=>{
+    const btn = document.createElement("button");
+    btn.className = "line-btn"; btn.dataset.line = line.id;
+    btn.innerHTML = `<span class="line-swatch" style="background:${line.color}"></span>
+      <span class="line-name">${line.name}<small>${line.en} · ${line.stations.length}개역</small></span>`;
+    btn.addEventListener("click", ()=>{
+      if(activeLines.has(line.id)) activeLines.delete(line.id); else activeLines.add(line.id);
+      applyHighlight();
+    });
+    legendEl.appendChild(btn);
+  });
+});
+document.getElementById("reset-btn").addEventListener("click", ()=>{ activeLines.clear(); applyHighlight(); });
+
+/* ---------------- tooltip + bookmark toggle ---------------- */
+const tooltip = document.getElementById("tooltip");
+const mapWrap = document.getElementById("map-wrap");
+function showTooltip(sid, evt){
+  const st = stations[sid]; const linesHere = stationLineMap[sid]||[];
+  tooltip.innerHTML = `<div class="tt-name">${st.en}</div><div class="tt-jp">${st.jp}</div>
+    <div class="tt-lines">${linesHere.map(l=>`<span class="tt-line-chip" style="background:${l.color}">${l.name.replace('JR ','').replace('도쿄메트로 ','').replace('도영 ','')}</span>`).join("")}</div>
+    <div class="tt-hint">클릭하여 ${bookmarks.has(sid)?"즐겨찾기 해제":"즐겨찾기 ★ 등록"}</div>`;
+  tooltip.style.display = "block";
+  const rect = mapWrap.getBoundingClientRect();
+  tooltip.style.left = (evt.clientX - rect.left + 14) + "px";
+  tooltip.style.top = (evt.clientY - rect.top + 14) + "px";
+}
+function hideTooltip(){ tooltip.style.display = "none"; }
+
+Object.keys(stationDotEls).forEach(sid=>{
+  const dot = stationDotEls[sid];
+  dot.addEventListener("mousemove", e=>showTooltip(sid,e));
+  dot.addEventListener("mouseleave", hideTooltip);
+  dot.addEventListener("click", (e)=>{
+    e.stopPropagation();
+    if(bookmarks.has(sid)) bookmarks.delete(sid); else bookmarks.add(sid);
+    renderStars(); renderBookmarkList(); applyHighlight(); saveBookmarks();
+    showTooltip(sid, e);
+  });
+});
+
+/* ---------------- bookmark panel ---------------- */
+function renderBookmarkList(){
+  const list = document.getElementById("bm-list");
+  list.innerHTML = "";
+  if(bookmarks.size === 0){ list.innerHTML = `<div class="bm-empty">역을 클릭해 즐겨찾기에 추가해보세요.</div>`; return; }
+  [...bookmarks].forEach(sid=>{
+    const st = stations[sid];
+    const item = document.createElement("div"); item.className="bm-item";
+    item.innerHTML = `<span style="color:#f2c14e">★</span> ${st.en} <span style="color:var(--ink-dim);font-size:10.5px">${st.jp}</span>`;
+    item.addEventListener("click", ()=>{ bookmarks.delete(sid); renderStars(); renderBookmarkList(); applyHighlight(); saveBookmarks(); });
+    list.appendChild(item);
+  });
+}
+
+/* ---------------- search ---------------- */
+const searchInput = document.getElementById("search-input");
+const searchResults = document.getElementById("search-results");
+searchInput.addEventListener("input", ()=>{
+  const q = searchInput.value.trim().toLowerCase();
+  if(!q){ searchResults.style.display="none"; return; }
+  const matches = Object.keys(stations).filter(sid=>{
+    const st = stations[sid];
+    return st.en.toLowerCase().includes(q) || st.jp.includes(q);
+  }).slice(0,10);
+  searchResults.innerHTML = "";
+  if(matches.length === 0){ searchResults.innerHTML = `<div class="sr-empty">검색 결과가 없습니다</div>`; }
+  else {
+    matches.forEach(sid=>{
+      const st = stations[sid]; const linesHere = stationLineMap[sid]||[];
+      const item = document.createElement("div"); item.className = "sr-item";
+      item.innerHTML = `<span class="sr-chip" style="background:${linesHere[0]?linesHere[0].color:'#888'}"></span>${st.en}<span class="sr-jp">${st.jp}</span>`;
+      item.addEventListener("click", ()=>{
+        focusStation(sid); searchResults.style.display="none"; searchInput.value = st.en;
+        if(window.innerWidth <= 720) setSidebarCollapsed(true);
+      });
+      searchResults.appendChild(item);
+    });
+  }
+  searchResults.style.display = "block";
+});
+document.addEventListener("click", (e)=>{ if(!searchResults.contains(e.target) && e.target !== searchInput) searchResults.style.display="none"; });
+
+function focusStation(sid){
+  const st = stations[sid];
+  const targetW = 220, targetH = targetW * ASPECT;
+  animateViewBox({x: st.x - targetW/2, y: st.y - targetH/2, w: targetW, h: targetH}, 500);
+  const ring = pulseEls[sid];
+  ring.classList.remove("go"); void ring.offsetWidth; ring.classList.add("go");
+}
+
+/* ---------------- sidebar toggle ---------------- */
+const sidebarEl = document.getElementById("sidebar");
+const sidebarToggleBtn = document.getElementById("sidebar-toggle");
+function setSidebarCollapsed(collapsed){
+  sidebarEl.classList.toggle("collapsed", collapsed);
+  sidebarToggleBtn.textContent = collapsed ? "☰" : "✕";
+}
+sidebarToggleBtn.addEventListener("click", ()=>{
+  setSidebarCollapsed(!sidebarEl.classList.contains("collapsed"));
+});
+setSidebarCollapsed(window.innerWidth <= 720);
+
+/* ---------------- zoom / pan ---------------- */
+function clampViewBox(){
+  vb.w = Math.max(VB_MIN_W, Math.min(VB_MAX_W, vb.w));
+  vb.h = vb.w * ASPECT;
+  vb.x = Math.max(-220, Math.min(1100 - vb.w + 220, vb.x));
+  vb.y = Math.max(-120, Math.min(800 - vb.h + 120, vb.y));
+}
+function animateViewBox(target, duration){
+  const start = {...vb}; const t0 = performance.now();
+  function step(now){
+    const t = Math.min(1, (now - t0) / duration), ease = 1 - Math.pow(1-t, 3);
+    vb = { x: start.x + (target.x-start.x)*ease, y: start.y + (target.y-start.y)*ease,
+           w: start.w + (target.w-start.w)*ease, h: start.h + (target.h-start.h)*ease };
+    updateViewBox();
+    if(t < 1) requestAnimationFrame(step);
+  }
+  requestAnimationFrame(step);
+}
+svg.addEventListener("wheel", (e)=>{
+  e.preventDefault();
+  const rect = svg.getBoundingClientRect();
+  const px = (e.clientX - rect.left) / rect.width, py = (e.clientY - rect.top) / rect.height;
+  const scale = e.deltaY > 0 ? 1.15 : 0.87;
+  const newW = Math.max(VB_MIN_W, Math.min(VB_MAX_W, vb.w * scale)), newH = newW * ASPECT;
+  vb.x = vb.x + px * (vb.w - newW); vb.y = vb.y + py * (vb.h - newH);
+  vb.w = newW; vb.h = newH; clampViewBox(); updateViewBox();
+}, {passive:false});
+
+let isPanning=false, panStart=null, vbStart=null;
+svg.addEventListener("mousedown", (e)=>{ isPanning=true; mapWrap.classList.add("panning"); panStart={x:e.clientX,y:e.clientY}; vbStart={...vb}; });
+window.addEventListener("mousemove", (e)=>{
+  if(!isPanning) return;
+  const rect = svg.getBoundingClientRect();
+  const dx = (e.clientX - panStart.x) * (vb.w / rect.width), dy = (e.clientY - panStart.y) * (vb.h / rect.height);
+  vb.x = vbStart.x - dx; vb.y = vbStart.y - dy; clampViewBox(); updateViewBox();
+});
+window.addEventListener("mouseup", ()=>{ isPanning=false; mapWrap.classList.remove("panning"); });
+
+/* ---- touch: one-finger pan, two-finger pinch zoom ---- */
+let touchState = null;
+function touchDist(t0,t1){ return Math.hypot(t0.clientX-t1.clientX, t0.clientY-t1.clientY); }
+svg.addEventListener("touchstart", (e)=>{
+  if(e.touches.length === 1){
+    touchState = {mode:"pan", x:e.touches[0].clientX, y:e.touches[0].clientY, vbStart:{...vb}};
+  } else if(e.touches.length === 2){
+    const rect = svg.getBoundingClientRect();
+    touchState = {
+      mode:"pinch", dist: touchDist(e.touches[0], e.touches[1]), vbStart:{...vb},
+      midX:(e.touches[0].clientX+e.touches[1].clientX)/2 - rect.left,
+      midY:(e.touches[0].clientY+e.touches[1].clientY)/2 - rect.top,
+      rectW: rect.width, rectH: rect.height
+    };
+  }
+}, {passive:true});
+svg.addEventListener("touchmove", (e)=>{
+  if(!touchState) return;
+  e.preventDefault();
+  if(touchState.mode==="pan" && e.touches.length===1){
+    const rect = svg.getBoundingClientRect();
+    const dx = (e.touches[0].clientX - touchState.x) * (vb.w/rect.width);
+    const dy = (e.touches[0].clientY - touchState.y) * (vb.h/rect.height);
+    vb.x = touchState.vbStart.x - dx; vb.y = touchState.vbStart.y - dy;
+    clampViewBox(); updateViewBox();
+  } else if(touchState.mode==="pinch" && e.touches.length===2){
+    const dist = touchDist(e.touches[0], e.touches[1]);
+    const scale = touchState.dist / Math.max(1,dist);
+    const newW = Math.max(VB_MIN_W, Math.min(VB_MAX_W, touchState.vbStart.w * scale));
+    const newH = newW * ASPECT;
+    const px = touchState.midX/touchState.rectW, py = touchState.midY/touchState.rectH;
+    vb.x = touchState.vbStart.x + px*(touchState.vbStart.w-newW);
+    vb.y = touchState.vbStart.y + py*(touchState.vbStart.h-newH);
+    vb.w = newW; vb.h = newH;
+    clampViewBox(); updateViewBox();
+  }
+}, {passive:false});
+svg.addEventListener("touchend", (e)=>{ if(e.touches.length===0) touchState=null; });
+svg.addEventListener("touchcancel", ()=>{ touchState=null; });
+
+document.getElementById("zoom-in").addEventListener("click", ()=>{
+  const newW = Math.max(VB_MIN_W, vb.w*0.75), cx = vb.x+vb.w/2, cy = vb.y+vb.h/2;
+  animateViewBox({x:cx-newW/2, y:cy-(newW*ASPECT)/2, w:newW, h:newW*ASPECT}, 250);
+});
+document.getElementById("zoom-out").addEventListener("click", ()=>{
+  const newW = Math.min(VB_MAX_W, vb.w*1.33), cx = vb.x+vb.w/2, cy = vb.y+vb.h/2;
+  animateViewBox({x:cx-newW/2, y:cy-(newW*ASPECT)/2, w:newW, h:newW*ASPECT}, 250);
+});
+document.getElementById("zoom-reset").addEventListener("click", ()=>{ animateViewBox({x:0,y:0,w:1000,h:800}, 350); });
+
+/* ---------------- init ---------------- */
+updateViewBox();
+applyHighlight();
+loadBookmarks();
+</script>
+</body>
+</html>
